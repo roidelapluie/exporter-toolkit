@@ -1,3 +1,8 @@
+## 0.6.0 / 2021-01-15
+
+* [FEATURE] Cache basic authentication results to significantly improve
+  performances. #32
+
 ## 0.5.0 / 2021-01-13
 
 * [CHANGE] rename `https` package to `web`. #29
