@@ -54,6 +54,7 @@ var (
 		"No HTTP2 cipher":              regexp.MustCompile(`TLSConfig.CipherSuites is missing an HTTP/2-required`),
 		"Incompatible TLS version":     regexp.MustCompile(`protocol version not supported`),
 		"Invalid value":                regexp.MustCompile(`invalid value for`),
+		"Invalid header":               regexp.MustCompile(`HTTP header ".*" can not be configured`),
 	}
 )
 
@@ -294,6 +295,11 @@ func TestServerBehaviour(t *testing.T) {
 			Name:           `invalid X-Frame-Options headers config`,
 			YAMLConfigPath: "testdata/web_config_headers_frame_options.bad.yml",
 			ExpectedError:  ErrorMap["Invalid value"],
+		},
+		{
+			Name:           `HTTP header that can not be overriden`,
+			YAMLConfigPath: "testdata/web_config_headers_extra_header.bad.yml",
+			ExpectedError:  ErrorMap["Invalid header"],
 		},
 	}
 	for _, testInputs := range testTables {

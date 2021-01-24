@@ -25,6 +25,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// extraHTTPHeaders is a map of HTTP headers that can be added to HTTP
+// responses.
+// This is private on purpose to ensure consistency in the Prometheus ecosystem.
+var extraHTTPHeaders = map[string][]string{
+	"Strict-Transport-Security": nil,
+	"X-Content-Type-Options":    {"nosniff"},
+	"X-Frame-Options":           {"deny", "sameorigin"},
+	"X-XSS-Protection":          nil,
+}
+
 func validateUsers(configPath string) error {
 	c, err := getConfig(configPath)
 	if err != nil {
@@ -41,40 +51,26 @@ func validateUsers(configPath string) error {
 	return nil
 }
 
-// headerConfig represents an HTTP headers configuration.
-type headerConfig struct {
-	XFrameOptions           string `yaml:"X-Frame-Options,omitempty"`
-	XContentTypeOptions     string `yaml:"X-Content-Type-Options,omitempty"`
-	XXSSProtection          string `yaml:"X-XSS-Protection"`
-	StrictTransportSecurity string `yaml:"Strict-Transport-Security,omitempty"`
-}
-
-// Validate that the provided configuration is correct.
+// validateHeaderConfig checks that the provided header configuration is correct.
 // It does not check the validity of all the values, only the ones which are
 // well-defined enumerations.
-func (c *headerConfig) Validate() error {
-	if c.XFrameOptions != "" && c.XFrameOptions != "deny" && c.XFrameOptions != "sameorigin" {
-		return fmt.Errorf("invalid value for X-Frame-Options. Expected one of: [ deny, sameorigin ], but got: %s", c.XFrameOptions)
-	}
-	if c.XContentTypeOptions != "" && c.XContentTypeOptions != "nosniff" {
-		return fmt.Errorf("invalid value for X-Content-Type-Options. Expected nosniff, but got: %s", c.XContentTypeOptions)
+func validateHeaderConfig(headers map[string]string) error {
+HeadersLoop:
+	for k, v := range headers {
+		values, ok := extraHTTPHeaders[k]
+		if !ok {
+			return fmt.Errorf("HTTP header %q can not be configured", k)
+		}
+		for _, allowedValue := range values {
+			if v == allowedValue {
+				continue HeadersLoop
+			}
+		}
+		if len(values) > 0 {
+			return fmt.Errorf("invalid value for %s. Expected one of: %q, but got: %q", k, values, v)
+		}
 	}
 	return nil
-}
-
-func (c *headerConfig) setHeader(header http.Header) {
-	if c.XFrameOptions != "" {
-		header.Set("X-Frame-Options", c.XFrameOptions)
-	}
-	if c.XContentTypeOptions != "" {
-		header.Set("X-Content-Type-Options", c.XContentTypeOptions)
-	}
-	if c.XXSSProtection != "" {
-		header.Set("X-XSS-Protection", c.XXSSProtection)
-	}
-	if c.StrictTransportSecurity != "" {
-		header.Set("Strict-Transport-Security", c.StrictTransportSecurity)
-	}
 }
 
 type webHandler struct {
@@ -96,7 +92,9 @@ func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Configure http headers.
-	c.HTTPConfig.Header.setHeader(w.Header())
+	for k, v := range c.HTTPConfig.Header {
+		w.Header().Set(k, v)
+	}
 
 	if len(c.Users) == 0 {
 		u.handler.ServeHTTP(w, r)

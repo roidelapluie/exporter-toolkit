@@ -59,8 +59,8 @@ func (t *TLSStruct) SetDirectory(dir string) {
 }
 
 type HTTPStruct struct {
-	HTTP2  bool         `yaml:"http2"`
-	Header headerConfig `yaml:"headers,omitempty"`
+	HTTP2  bool              `yaml:"http2"`
+	Header map[string]string `yaml:"headers,omitempty"`
 }
 
 func getConfig(configPath string) (*Config, error) {
@@ -78,7 +78,7 @@ func getConfig(configPath string) (*Config, error) {
 	}
 	err = yaml.UnmarshalStrict(content, c)
 	if err == nil {
-		err = c.HTTPConfig.Header.Validate()
+		err = validateHeaderConfig(c.HTTPConfig.Header)
 	}
 	c.TLSConfig.SetDirectory(filepath.Dir(configPath))
 	return c, err
