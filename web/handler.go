@@ -17,6 +17,7 @@ package web
 
 import (
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -40,7 +41,43 @@ func validateUsers(configPath string) error {
 	return nil
 }
 
-type userAuthRoundtrip struct {
+// headerConfig represents an HTTP headers configuration.
+type headerConfig struct {
+	XFrameOptions           string `yaml:"X-Frame-Options,omitempty"`
+	XContentTypeOptions     string `yaml:"X-Content-Type-Options,omitempty"`
+	XXSSProtection          string `yaml:"X-XSS-Protection"`
+	StrictTransportSecurity string `yaml:"Strict-Transport-Security,omitempty"`
+}
+
+// Validate that the provided configuration is correct.
+// It does not check the validity of all the values, only the ones which are
+// well-defined enumerations.
+func (c *headerConfig) Validate() error {
+	if c.XFrameOptions != "" && c.XFrameOptions != "deny" && c.XFrameOptions != "sameorigin" {
+		return fmt.Errorf("invalid value for X-Frame-Options. Expected one of: [ deny, sameorigin ], but got: %s", c.XFrameOptions)
+	}
+	if c.XContentTypeOptions != "" && c.XContentTypeOptions != "nosniff" {
+		return fmt.Errorf("invalid value for X-Content-Type-Options. Expected nosniff, but got: %s", c.XContentTypeOptions)
+	}
+	return nil
+}
+
+func (c *headerConfig) setHeader(header http.Header) {
+	if c.XFrameOptions != "" {
+		header.Set("X-Frame-Options", c.XFrameOptions)
+	}
+	if c.XContentTypeOptions != "" {
+		header.Set("X-Content-Type-Options", c.XContentTypeOptions)
+	}
+	if c.XXSSProtection != "" {
+		header.Set("X-XSS-Protection", c.XXSSProtection)
+	}
+	if c.StrictTransportSecurity != "" {
+		header.Set("Strict-Transport-Security", c.StrictTransportSecurity)
+	}
+}
+
+type webHandler struct {
 	tlsConfigPath string
 	handler       http.Handler
 	logger        log.Logger
@@ -50,13 +87,16 @@ type userAuthRoundtrip struct {
 	bcryptMtx sync.Mutex
 }
 
-func (u *userAuthRoundtrip) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (u *webHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c, err := getConfig(u.tlsConfigPath)
 	if err != nil {
 		u.logger.Log("msg", "Unable to parse configuration", "err", err)
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+
+	// Configure http headers.
+	c.HTTPConfig.Header.setHeader(w.Header())
 
 	if len(c.Users) == 0 {
 		u.handler.ServeHTTP(w, r)
